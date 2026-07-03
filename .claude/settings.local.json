@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -o \"must be a valid IP address\\\\|list-disc\" /tmp/set2.html)",
+      "Read(//tmp/**)",
+      "Read(//e/xampp/htdocs/smart medicine box/**)",
+      "Bash(php artisan *)"
+    ]
+  }
+}
