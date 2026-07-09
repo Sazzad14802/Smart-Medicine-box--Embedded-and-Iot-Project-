@@ -94,17 +94,25 @@ class MedicineModeController extends Controller
     /**
      * Push all medicine schedules to the ESP32.
      */
-    public function sync(): RedirectResponse
-    {
-        $schedules = MedicineSchedule::all()->toArray();
-        $result = $this->esp32Service->sendMedicineSchedules($schedules);
+  public function sync(): RedirectResponse
+{
+    $schedules = MedicineSchedule::all()
+        ->map(fn($s) => [
+            'name'          => $s->name,
+            'compartments'  => $s->compartments,
+            'reminder_time' => $s->reminder_time,
+            'is_enabled'    => (bool) $s->is_enabled,
+        ])
+        ->all();
 
-        if (! $result['success']) {
-            return back()->with('error', 'Unable to reach the ESP32 device.');
-        }
+    $result = $this->esp32Service->sendMedicineSchedules($schedules);
 
-        return back()->with('success', 'All medicine schedules sent to the ESP32.');
+    if (! $result['success']) {
+        return back()->with('error', 'Unable to reach the ESP32 device.');
     }
+
+    return back()->with('success', 'All medicine schedules sent to the ESP32.');
+}
 
     /**
      * Shared validation rules for store/update.

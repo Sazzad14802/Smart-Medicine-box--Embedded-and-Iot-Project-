@@ -30,27 +30,35 @@ class DoseModeController extends Controller
      * Save all 6 dose schedules at once and push them to the ESP32.
      */
     public function update(Request $request): RedirectResponse
-    {
-        $validated = $request->validate([
-            'schedules' => 'required|array|size:6',
-            'schedules.*.reminder_time' => 'required|date_format:H:i',
-            'schedules.*.is_enabled' => 'nullable|boolean',
+{
+    $validated = $request->validate([
+        'schedules' => 'required|array|size:6',
+        'schedules.*.reminder_time' => 'required|date_format:H:i',
+        'schedules.*.is_enabled' => 'nullable|boolean',
+    ]);
+
+    foreach ($validated['schedules'] as $compartmentNumber => $data) {
+        DoseSchedule::where('compartment_number', $compartmentNumber)->update([
+            'reminder_time' => $data['reminder_time'],
+            'is_enabled' => $request->boolean("schedules.{$compartmentNumber}.is_enabled"),
         ]);
-
-        foreach ($validated['schedules'] as $compartmentNumber => $data) {
-            DoseSchedule::where('compartment_number', $compartmentNumber)->update([
-                'reminder_time' => $data['reminder_time'],
-                'is_enabled' => $request->boolean("schedules.{$compartmentNumber}.is_enabled"),
-            ]);
-        }
-
-        $schedules = DoseSchedule::orderBy('compartment_number')->get()->toArray();
-        $result = $this->esp32Service->sendDoseSchedules($schedules);
-
-        if (! $result['success']) {
-            return back()->with('error', 'Dose schedules saved, but the ESP32 device could not be reached.');
-        }
-
-        return back()->with('success', 'Dose schedules updated successfully.');
     }
+
+    $schedules = DoseSchedule::orderBy('compartment_number')
+        ->get()
+        ->map(fn($s) => [
+            'compartment_number' => $s->compartment_number,
+            'reminder_time'      => $s->reminder_time,
+            'is_enabled'         => (bool) $s->is_enabled,
+        ])
+        ->all();
+
+    $result = $this->esp32Service->sendDoseSchedules($schedules);
+
+    if (! $result['success']) {
+        return back()->with('error', 'Dose schedules saved, but the ESP32 device could not be reached.');
+    }
+
+    return back()->with('success', 'Dose schedules updated successfully.');
+}
 }
