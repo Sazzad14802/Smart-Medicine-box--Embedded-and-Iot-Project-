@@ -27,3 +27,5 @@ An IoT-based Smart Medicine Box powered by an ESP32 microcontroller and a modern
 3. Set up your `.env` file and run `php artisan migrate` to build the database.
 4. Start the server using `php artisan serve`.
 5. Open the web app, connect to your ESP32's IP address, and configure your first schedule!
+
+line from feature branch
