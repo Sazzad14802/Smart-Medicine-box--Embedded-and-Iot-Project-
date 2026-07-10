@@ -27,7 +27,23 @@ class Esp32Service
     public function getStatus(): array
     {
         try {
-            return $this->request('get', '/status');
+            $response = $this->request('get', '/status');
+            
+            if (!empty($response['log_queue'])) {
+                foreach ($response['log_queue'] as $logItem) {
+                    $parts = explode('|', $logItem);
+                    if (count($parts) >= 2) {
+                        \App\Models\MissedDoseLog::create([
+                            'operating_mode' => $parts[0],
+                            'scheduled_time' => $parts[1],
+                            'missed_compartments' => $parts[2] ?? null,
+                        ]);
+                    }
+                }
+                $this->clearLogs();
+            }
+
+            return $response;
         } catch (Esp32ConnectionException $e) {
             return $this->errorResponse($e);
         }
@@ -127,6 +143,18 @@ class Esp32Service
     {
         try {
             return $this->request('post', '/restart');
+        } catch (Esp32ConnectionException $e) {
+            return $this->errorResponse($e);
+        }
+    }
+
+    /**
+     * Ask the ESP32 to clear its log queue.
+     */
+    public function clearLogs(): array
+    {
+        try {
+            return $this->request('post', '/clear-logs');
         } catch (Esp32ConnectionException $e) {
             return $this->errorResponse($e);
         }

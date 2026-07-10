@@ -27,6 +27,15 @@ class DeviceControlsController extends Controller
     {
         $result = $this->esp32Service->syncTime();
 
+        // Auto-sync timeout and mode from the database so the ESP32 recovers them after a reboot!
+        $settings = \App\Models\DeviceSetting::first();
+        if ($settings) {
+            $this->esp32Service->sendTimeout($settings->missed_dose_timeout_minutes ?? 10);
+            if ($settings->operating_mode) {
+                $this->esp32Service->sendMode($settings->operating_mode);
+            }
+        }
+
         return response()->json([
             'success' => $result['success'],
             'message' => $result['success']

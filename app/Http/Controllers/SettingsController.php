@@ -37,7 +37,11 @@ class SettingsController extends Controller
         ]);
 
         $deviceSettings = DeviceSetting::first();
-        $deviceSettings->update($validated);
+        if ($deviceSettings) {
+            $deviceSettings->update($validated);
+        } else {
+            DeviceSetting::create($validated);
+        }
 
         $result = $this->esp32Service->sendTimeout($validated['missed_dose_timeout_minutes']);
 

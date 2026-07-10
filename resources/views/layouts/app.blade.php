@@ -19,15 +19,25 @@
 
             <nav class="flex-1 px-3 py-4 space-y-1">
                 @php
+                    $currentMode = \App\Models\DeviceSetting::first()?->operating_mode;
+                    
                     $navItems = [
                         ['label' => 'Dashboard', 'route' => 'dashboard'],
                         ['label' => 'Mode Selection', 'route' => 'mode-selection'],
-                        ['label' => 'Dose Mode', 'route' => 'dose-mode'],
-                        ['label' => 'Medicine Mode', 'route' => 'medicine-mode'],
-                        ['label' => 'Settings', 'route' => 'settings'],
-                        ['label' => 'Device Controls', 'route' => 'device-controls'],
-                        ['label' => 'Live Status', 'route' => 'live-status'],
                     ];
+
+                    if ($currentMode === 'dose_mode' || !$currentMode) {
+                        $navItems[] = ['label' => 'Dose Mode', 'route' => 'dose-mode'];
+                    }
+                    if ($currentMode === 'medicine_mode' || !$currentMode) {
+                        $navItems[] = ['label' => 'Medicine Mode', 'route' => 'medicine-mode'];
+                    }
+
+                    $navItems = array_merge($navItems, [
+                        ['label' => 'Settings', 'route' => 'settings'],
+                        ['label' => 'Missed Doses', 'route' => 'missed-doses'],
+                        ['label' => 'Live Status', 'route' => 'live-status'],
+                    ]);
                 @endphp
 
                 @foreach ($navItems as $item)
@@ -65,5 +75,17 @@
     </div>
 
     @stack('scripts')
+    <script>
+        // Automatically sync time quietly in the background when any page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            fetch('{{ route('device-controls.sync-time') }}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                    'Accept': 'application/json'
+                }
+            }).catch(() => {});
+        });
+    </script>
 </body>
 </html>

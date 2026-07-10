@@ -7,6 +7,7 @@ use App\Http\Controllers\LiveStatusController;
 use App\Http\Controllers\MedicineModeController;
 use App\Http\Controllers\ModeController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\MissedDoseLogController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -40,3 +41,6 @@ Route::get('/device-controls/refresh-status', [DeviceControlsController::class, 
 
 Route::get('/live-status', [LiveStatusController::class, 'index'])->name('live-status');
 Route::get('/live-status/poll', [LiveStatusController::class, 'poll'])->name('live-status.poll');
+
+Route::get('/missed-doses', [MissedDoseLogController::class, 'index'])->name('missed-doses');
+Route::delete('/missed-doses', [MissedDoseLogController::class, 'clear'])->name('missed-doses.clear');
