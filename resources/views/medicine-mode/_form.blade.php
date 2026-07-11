@@ -6,7 +6,7 @@
 
 <div class="space-y-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
     <div>
-        <label for="name" class="block text-sm font-medium text-slate-700">Medicine Name</label>
+        <label for="name" class="block text-sm font-medium text-slate-700">Schedule Name</label>
         <input
             type="text"
             id="name"

@@ -36,7 +36,11 @@ class ModeController extends Controller
         ]);
 
         $deviceSettings = DeviceSetting::first();
-        $deviceSettings->update(['operating_mode' => $validated['mode']]);
+        if ($deviceSettings) {
+            $deviceSettings->update(['operating_mode' => $validated['mode']]);
+        } else {
+            DeviceSetting::create(['operating_mode' => $validated['mode']]);
+        }
 
         $result = $this->esp32Service->sendMode($validated['mode']);
 

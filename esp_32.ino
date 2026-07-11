@@ -1,6 +1,6 @@
 // ============================================================
 //  Smart Medicine Box — ESP32 HTTP Server
-//  Pins: IR(15,2,4,16,17,5)  LED(18,19,21,25,33,32)
+//  Pins: IR(15,19,4,16,17,5)  LED(18,2,21,25,33,32)
 //        Reed=22  Buzzer=23
 // ============================================================
 
@@ -22,8 +22,8 @@ IPAddress SUBNET   (255, 255, 255,  0);
 
 const long TZ_OFFSET_SEC = 6 * 3600;   // UTC+6 Bangladesh
 
-const int IR_PINS[6]  = {15,  2,  4, 16, 17,  5};
-const int LED_PINS[6] = {18, 19, 21, 25, 33, 32};
+const int IR_PINS[6]  = {15, 19,  4, 16, 17,  5};
+const int LED_PINS[6] = {18,  2, 21, 25, 33, 32};
 const int REED_PIN    = 22;
 const int BUZZER_PIN  = 23;
 
@@ -39,6 +39,8 @@ WebServer server(80);
 String g_mode    = "dose_mode";
 int    g_timeout = 10;
 String g_status  = "Ready";
+String g_logQueue[10];
+int    g_logCount = 0;
 
 bool          g_reminderActive  = false;
 unsigned long g_reminderStartMs = 0;
@@ -102,6 +104,7 @@ String getHHMM() {
 
 void stopReminder() {
   noTone(BUZZER_PIN);
+  digitalWrite(BUZZER_PIN, LOW);
   for (int i = 0; i < 6; i++) {
     digitalWrite(LED_PINS[i], LOW);
     g_pendingComps[i] = false;
@@ -123,6 +126,12 @@ void startReminder(int* compIndices, int count) {
   g_reminderActive  = true;
   g_boxOpened       = false;
   g_reminderStartMs = millis();
+  
+  // Play a single initial beep so the user always hears something,
+  // even if they left the lid open from the previous dose.
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
 }
 
 // ============================================================
@@ -141,6 +150,19 @@ void handleStatus() {
   doc["mode"]                = g_mode;
   doc["status"]              = g_status;
   doc["missed_dose_timeout"] = g_timeout;
+  if (g_logCount > 0) {
+    JsonArray q = doc["log_queue"].to<JsonArray>();
+    for (int i = 0; i < g_logCount; i++) {
+      q.add(g_logQueue[i]);
+    }
+  }
+  jsonResponse(200, doc);
+}
+
+void handleClearLogs() {
+  g_logCount = 0;
+  JsonDocument doc;
+  doc["success"] = true;
   jsonResponse(200, doc);
 }
 
@@ -256,28 +278,45 @@ void checkSchedules() {
                 hhmm.c_str(), g_mode.c_str(), g_doseCount, g_medCount);
 
   if (g_mode == "dose_mode") {
+    int fireComps[6];
+    int fireCount = 0;
     for (int i = 0; i < g_doseCount; i++) {
       Serial.printf("  slot %d: time=%s enabled=%d\n",
                     g_dose[i].number, g_dose[i].time.c_str(), g_dose[i].enabled);
       if (g_dose[i].enabled && g_dose[i].time == hhmm) {
         Serial.printf("[FIRE] Dose compartment %d\n", g_dose[i].number);
-        int idx[1] = { g_dose[i].number - 1 };
-        startReminder(idx, 1);
-        return;
+        if (fireCount < 6) {
+          fireComps[fireCount++] = g_dose[i].number - 1;
+        }
       }
     }
+    if (fireCount > 0) {
+      startReminder(fireComps, fireCount);
+      return;
+    }
   } else {
+    int fireComps[6];
+    int fireCount = 0;
     for (int i = 0; i < g_medCount; i++) {
       Serial.printf("  med '%s': time=%s enabled=%d\n",
                     g_med[i].name.c_str(), g_med[i].time.c_str(), g_med[i].enabled);
       if (g_med[i].enabled && g_med[i].time == hhmm) {
         Serial.printf("[FIRE] Medicine '%s'\n", g_med[i].name.c_str());
-        int comps[6];
-        for (int j = 0; j < g_med[i].compCount; j++)
-          comps[j] = g_med[i].comps[j] - 1;
-        startReminder(comps, g_med[i].compCount);
-        return;
+        for (int j = 0; j < g_med[i].compCount; j++) {
+          int cIdx = g_med[i].comps[j] - 1;
+          bool exists = false;
+          for (int k = 0; k < fireCount; k++) {
+            if (fireComps[k] == cIdx) exists = true;
+          }
+          if (!exists && fireCount < 6) {
+            fireComps[fireCount++] = cIdx;
+          }
+        }
       }
+    }
+    if (fireCount > 0) {
+      startReminder(fireComps, fireCount);
+      return;
     }
   }
 }
@@ -291,6 +330,16 @@ void checkReminder() {
 
   // Timeout check applies in both phases
   if (millis() - g_reminderStartMs >= (unsigned long)g_timeout * 60000UL) {
+    if (g_logCount < 10) {
+      String missedComps = "";
+      for (int i = 0; i < 6; i++) {
+        if (g_pendingComps[i]) {
+          if (missedComps.length() > 0) missedComps += ",";
+          missedComps += String(i + 1);
+        }
+      }
+      g_logQueue[g_logCount++] = g_mode + "|" + g_lastMinute + "|" + missedComps;
+    }
     stopReminder();
     g_status = "Missed Dose";
     Serial.println("Status → Missed Dose");
@@ -300,7 +349,7 @@ void checkReminder() {
   if (!g_boxOpened) {
     // ── Phase 1: waiting for lid to open ──
     if (digitalRead(REED_PIN) == REED_TAKEN_STATE) {
-      noTone(BUZZER_PIN);
+      digitalWrite(BUZZER_PIN, LOW);
       g_boxOpened = true;
       for (int i = 0; i < 6; i++)
         g_irBaseline[i] = digitalRead(IR_PINS[i]);
@@ -329,12 +378,12 @@ void checkReminder() {
   }
 }
 
-// 3. Buzzer: 1 s on / 1 s off during Phase 1 only.
+// 3. Buzzer: 1 s on / 1 s off during Phase 1 only, using digitalWrite for max volume.
 void tickBuzzer() {
   if (!g_reminderActive || g_boxOpened) return;
   unsigned long sec = (millis() - g_reminderStartMs) / 1000UL;
-  if (sec % 2 == 0) tone(BUZZER_PIN, 1000);
-  else               noTone(BUZZER_PIN);
+  if (sec % 2 == 0) digitalWrite(BUZZER_PIN, HIGH);
+  else              digitalWrite(BUZZER_PIN, LOW);
 }
 
 // ============================================================
@@ -345,7 +394,7 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(BUZZER_PIN, OUTPUT);
-  noTone(BUZZER_PIN);
+  digitalWrite(BUZZER_PIN, LOW);
   pinMode(REED_PIN, INPUT_PULLUP);
   for (int i = 0; i < 6; i++) {
     pinMode(IR_PINS[i],  INPUT);
@@ -356,7 +405,7 @@ void setup() {
   // Startup self-test: all LEDs + short beep
   Serial.println("\n--- Smart Medicine Box booting ---");
   for (int i = 0; i < 6; i++) digitalWrite(LED_PINS[i], HIGH);
-  tone(BUZZER_PIN, 1500); delay(200); noTone(BUZZER_PIN);
+  digitalWrite(BUZZER_PIN, HIGH); delay(200); digitalWrite(BUZZER_PIN, LOW);
   delay(500);
   for (int i = 0; i < 6; i++) digitalWrite(LED_PINS[i], LOW);
 
@@ -381,6 +430,7 @@ void setup() {
   server.on("/set-timeout",            HTTP_POST, handleSetTimeout);
   server.on("/sync-time",              HTTP_POST, handleSyncTime);
   server.on("/restart",                HTTP_POST, handleRestart);
+  server.on("/clear-logs",             HTTP_POST, handleClearLogs);
 
   server.begin();
   Serial.println("HTTP server ready on port 80.");

@@ -122,6 +122,6 @@
                 });
         }
 
-        setInterval(poll, 5000);
+        setInterval(poll, 1000);
     </script>
 @endpush
